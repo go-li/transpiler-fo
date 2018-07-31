@@ -27,6 +27,61 @@ func error_found_generictype(x []string) bool {
 	return len(x) == 1 && len(x[0]) == 1 && x[0][0] == 'X'
 }
 
+func collect_imports_map(asttree map[uint64][]byte, root uint64, imps map[string]string) {
+	root = mapast.O(root)
+	var ok bool
+	for _, ok = asttree[root]; ok; _, ok = asttree[root] {
+
+		if mapast.Which(asttree[root]) == nil {
+		} else if &asttree[root][0] == &mapast.ImportStmt[0] {
+
+			if nil == asttree[mapast.O(root)+1] {
+
+				fullpath := asttree[mapast.O(root)]
+
+				if fullpath[0] == '"' {
+					fullpath = fullpath[1:len(fullpath)-1]
+				}
+
+				pkgident := fullpath
+
+				for i := len(pkgident)-1 ; i >= 0; i-- {
+					if (pkgident[i] == '/') {
+						pkgident = pkgident[i+1:]
+						break
+					}
+				}
+
+				imps[string(pkgident)] = string(fullpath)
+			} else {
+
+				pkgident := asttree[mapast.O(root)]
+				fullpath := asttree[mapast.O(root)+1]
+
+				if fullpath[0] == '"' {
+					fullpath = fullpath[1:len(fullpath)-1]
+				}
+
+				if string(pkgident) != "." {
+					imps[string(pkgident)] = string(fullpath)
+				}
+			}
+
+			if false {
+				mapast.PrintDump(asttree, root, 0)
+			}
+		} else if &asttree[root][0] == &mapast.FileMatter[0] {
+			collect_imports_map(asttree, root, imps)
+		} else if &asttree[root][0] == &mapast.ImportsDef[0] {
+			collect_imports_map(asttree, root, imps)
+		}
+
+
+
+		root++
+	}
+}
+
 /*
  * check Generic Type Banned in Nongeneric toplevel function scope
  */
@@ -294,66 +349,82 @@ func resolve_toplevel_generic_funcs(ast map[uint64][]byte, gtypenames map[string
 /*
  * We mark generic callsites.
  */
-func resolve_generic_calls(ast map[uint64][]byte, grecvfuncnames map[string]struct{}, gfuncnames map[GfuncName]uint64, gfuncset map[uint64]byte, gcallset map[uint64]*Callsite, gcallstack *[]uint64, iterator uint64) (num int) {
+func resolve_generic_calls(ast map[uint64][]byte, grecvfuncnames map[string]struct{}, gfuncnames map[GfuncName]uint64, gfuncset map[uint64]byte, gcallset map[uint64]*Callsite, gcallstack *[]uint64, iterator uint64, genimp func(string, string)bool) (num int) {
 	var node = ast[iterator]
 	if len(node) == 0 {
 		return 0
 	}
 	switch &node[0] {
 	case &mapast.RootMatter[0]:
-		return resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator))
+		return resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator), genimp)
 
 	}
 	for i := uint64(0); ast[iterator+i] != nil; i++ {
 		switch &ast[iterator+i][0] {
 		case &mapast.FileMatter[0]:
-			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i))
+			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i), genimp)
 
 		case &mapast.ToplevFunc[0]:
 			var saved = gfuncnames[GfuncName{}]
 			gfuncnames[GfuncName{}] = iterator + i
-			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i))
+			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i), genimp)
 			gfuncnames[GfuncName{}] = saved
 
 		case &mapast.BlocOfCode[0]:
-			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i))
+			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i), genimp)
 
 		case &mapast.Expression[0]:
 			if len(ast[iterator+i])-1 == int(mapast.ExpressionCall) || len(ast[iterator+i])-1 == int(mapast.ExpressionCallDotDotDot) {
+
+
+
 				if mapast.Which(ast[mapast.O(iterator+i)]) == nil {
 					var where = gfuncnames[GfuncName{string(ast[mapast.O(iterator+i)]), [4]uint64{}}]
 					if where != 0 && (gfuncset[where]&1) == 0 {
+						if false {
+				mapast.PrintCode(ast, mapast.O(iterator+i), mapast.O(iterator+i))
+				println()}
+
 						gcallset[iterator+i] = &Callsite{calls_func: where, inside_func: gfuncnames[GfuncName{}]}
 						(*gcallstack) = append((*gcallstack), iterator+i)
 					}
 				} else if len(ast[mapast.O(iterator+i)])-1 == int(mapast.ExpressionDot) {
 					if _, ok := grecvfuncnames[string(ast[mapast.O(mapast.O(iterator+i))+1])]; ok {
+						if false {
+				mapast.PrintCode(ast, mapast.O(iterator+i), mapast.O(iterator+i))
+				println()}
+						gcallset[iterator+i] = &Callsite{calls_func: 0, inside_func: gfuncnames[GfuncName{}]}
+						(*gcallstack) = append((*gcallstack), iterator+i)
+					} else if genimp(string(ast[mapast.O(mapast.O(iterator+i))+0]), string(ast[mapast.O(mapast.O(iterator+i))+1])) {
+						if false {
+				mapast.PrintCode(ast, mapast.O(iterator+i), mapast.O(iterator+i))
+				println()}
 						gcallset[iterator+i] = &Callsite{calls_func: 0, inside_func: gfuncnames[GfuncName{}]}
 						(*gcallstack) = append((*gcallstack), iterator+i)
 					}
 				}
 			}
-			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i))
+			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i), genimp)
 
 		case &mapast.GoDferStmt[0]:
-			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i))
+			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i), genimp)
 
 		case &mapast.ReturnStmt[0]:
-			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i))
+			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i), genimp)
 
 		case &mapast.IncDecStmt[0]:
-			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i))
+			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i), genimp)
 
 		case &mapast.VarDefStmt[0]:
-			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i))
+			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i), genimp)
 
 		case &mapast.AssignStmt[0]:
-			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i))
+			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i), genimp)
 
 		case &mapast.ClosureExp[0]:
 			var saved = gfuncnames[GfuncName{}]
 			gfuncnames[GfuncName{}] = iterator + i
-			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i))
+			num += resolve_generic_calls(ast, grecvfuncnames, gfuncnames, gfuncset, gcallset, gcallstack, mapast.O(iterator+i), genimp)
 			gfuncnames[GfuncName{}] = saved
 
 		}
@@ -874,6 +945,11 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 	gcallset := make(map[uint64]*Callsite)
 	_ = gcallset
 	gcallstack := make([]uint64, 0)
+	gimports := make(map[string]string)
+	_ = gimports
+
+	collect_imports_map(asttree, 0, gimports)
+
 	for resolve_toplevel_generic_types(asttree, gtypenames, gtypeset, 0) > 0 {
 	}
 	for resolve_toplevel_generic_funcs(asttree, gtypenames, gtypeset, grecvfuncnames, gfuncnames, gfuncset, 0) > 0 {
@@ -882,18 +958,89 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 	if len(errors) > 0 {
 		return errors, nil
 	}
-	for resolve_generic_calls(asttree, grecvfuncnames, gfuncnames, gfuncset, gcallset, &gcallstack, 0) > 0 {
-	}
-	conf := types.Config{Importer: importer.Default()}
+
+	var imp = importer.Default()
+	conf := types.Config{Importer: types.ImporterFrom(imp)}
 	info := &types.Info{Types: make(map[ast.Expr]types.TypeAndValue)}
 	_, err := conf.Check("demopkg", fset, files, info)
 	if err != nil {
 		return nil, err
 	}
+
+	var calltype_loc uint64 = 11111111111
+
+	for resolve_generic_calls(asttree, grecvfuncnames, gfuncnames, gfuncset, gcallset, &gcallstack, 0, func(pkg string, fun string)bool {
+
+		var willimport = gimports[pkg]
+
+		for i, p := range imp.Pkgbrowse() {
+			if willimport != i {
+				continue
+			}
+
+			var obj = p.Scope().Lookup(fun)
+
+			var fmted = fmt.Sprintf("%s", obj)
+
+
+			for len(fmted) > 12 {
+				if fmted[0:12] == "untyped void" {
+
+					functype := obj.Type().(*types.Signature)
+
+					var paramsnum = uint64(functype.Params().Len())
+					var total = uint64(functype.Params().Len() + functype.Results().Len())
+
+//					fmt.Printf(" %v \n", functype)
+
+					asttree[calltype_loc] = mapast.ToplevFuncNode(false, paramsnum)
+
+
+					asttree[mapast.O(calltype_loc)] = nil
+
+					for j := uint64(0); j < total; j++ {
+						asttree[mapast.O(calltype_loc)+1+j] = mapast.TypedIdent[0:1]
+						asttree[mapast.O(mapast.O(calltype_loc)+1+j)] = []byte("x")
+
+						typerootpos := mapast.O(mapast.O(calltype_loc)+1+j)+1
+
+						asttree[typerootpos] = mapast.RootOfType
+
+						if j < paramsnum {
+							construct_type(asttree, mapast.O(typerootpos), functype.Params().At(int(j)).Type())
+						} else {
+							construct_type(asttree, mapast.O(typerootpos), functype.Results().At(int(j - paramsnum)).Type())
+						}
+					}
+
+					gfuncnames[GfuncName{name:fmt.Sprintf("%s.%s", pkg, fun)}] = calltype_loc
+
+//					mapast.PrintDump(asttree, calltype_loc, 0)
+
+					calltype_loc += 2
+
+					return true
+				}
+
+				fmted = fmted[1:]
+			}
+
+
+
+//			fmt.Printf("%v %v %v\n", obj,p ,fun)
+		}
+
+		return false
+
+	}) > 0 {
+	}
+
+//	mapast.PrintDump(asttree, 0, 0)
+
 	var gcallstack_i = 0
 	for fileid := 0; fileid < len(files); fileid++ {
 		ast.Inspect(files[fileid], func(n ast.Node) bool {
-			if gcallstack_i > len(gcallstack) {
+			if gcallstack_i >= len(gcallstack) {
 				return true
 			}
 			if cexpr, ok := n.(*ast.CallExpr); ok {
@@ -912,6 +1059,9 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 						construct_type(scratchpad, mapast.O(0), typ)
 						current = b32_to_GfuncName(funcname.Name, ast_sha256(scratchpad, 0))
 						scratchpad = nil
+					} else if pkgname, ok5 := selector.X.(*ast.Ident); ok5 {
+						current.name = fmt.Sprintf("%s.%s", pkgname, funcname)
+						ok2 = true
 					}
 				} else {
 					current.name = funcname.Name
@@ -997,30 +1147,73 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 
 			var name = asttree[mapast.O(k)]
 
-			name = append(name, '[', 'T', ']')
+			if mapast.Which(name) == nil {
+				name = append(name, '[', 'T', ']')
+				asttree[mapast.O(k)] = name
+			} else if len(name)-1 == int(mapast.ExpressionDot) {
+				name = asttree[mapast.O(mapast.O(k))+1]
+				name = append(name, '[', 'T', ']')
+				asttree[mapast.O(mapast.O(k))+1] = name
+			}
+
+
+			continue
+		}
+//		if v.calls_func == 0 {
+//			continue
+//		}
+
+		var name = asttree[mapast.O(k)]
+
+		if mapast.Which(name) == nil {
+
+			name = append(name, '[')
+
+			if v.wildctype == 0 {
+				name = append(name, 'T')
+			} else {
+
+				mapast.Code(func(s string) {
+					if len(s) != 0 {
+						name = append(name, []byte(s)...)
+					} else {
+						name = append(name, '\n')
+					}
+				}, asttree, v.wildctype, 0)
+
+			}
+
+			name = append(name, ']')
 
 			asttree[mapast.O(k)] = name
 
 
-			continue
-		}
-		if v.calls_func == 0 {
-			continue
-		}
+		} else if len(name)-1 == int(mapast.ExpressionDot) {
 
-		var name = asttree[mapast.O(k)]
-
-		name = append(name, '[')
-
-		mapast.Code(func(s string) {
-			if len(s) != 0 {
-				name = append(name, []byte(s)...)
+			if false {
+				mapast.PrintDump(asttree, k, 0)
 			}
-		}, asttree, v.wildctype, 0)
 
-		name = append(name, ']')
+			name = asttree[mapast.O(mapast.O(k))+1]
+			name = append(name, '[')
 
-		asttree[mapast.O(k)] = name
+			if v.wildctype == 0 {
+				name = append(name, 'T')
+			} else {
+
+				mapast.Code(func(s string) {
+					if len(s) != 0 {
+						name = append(name, []byte(s)...)
+					} else {
+						name = append(name, '\n')
+					}
+				}, asttree, v.wildctype, 0)
+			}
+
+			name = append(name, ']')
+			asttree[mapast.O(mapast.O(k))+1] = name
+
+		}
 
 
 
