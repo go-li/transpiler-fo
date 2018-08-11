@@ -40,13 +40,13 @@ func collect_imports_map(asttree map[uint64][]byte, root uint64, imps map[string
 				fullpath := asttree[mapast.O(root)]
 
 				if fullpath[0] == '"' {
-					fullpath = fullpath[1:len(fullpath)-1]
+					fullpath = fullpath[1 : len(fullpath)-1]
 				}
 
 				pkgident := fullpath
 
-				for i := len(pkgident)-1 ; i >= 0; i-- {
-					if (pkgident[i] == '/') {
+				for i := len(pkgident) - 1; i >= 0; i-- {
+					if pkgident[i] == '/' {
 						pkgident = pkgident[i+1:]
 						break
 					}
@@ -59,7 +59,7 @@ func collect_imports_map(asttree map[uint64][]byte, root uint64, imps map[string
 				fullpath := asttree[mapast.O(root)+1]
 
 				if fullpath[0] == '"' {
-					fullpath = fullpath[1:len(fullpath)-1]
+					fullpath = fullpath[1 : len(fullpath)-1]
 				}
 
 				if string(pkgident) != "." {
@@ -75,8 +75,6 @@ func collect_imports_map(asttree map[uint64][]byte, root uint64, imps map[string
 		} else if &asttree[root][0] == &mapast.ImportsDef[0] {
 			collect_imports_map(asttree, root, imps)
 		}
-
-
 
 		root++
 	}
@@ -349,7 +347,7 @@ func resolve_toplevel_generic_funcs(ast map[uint64][]byte, gtypenames map[string
 /*
  * We mark generic callsites.
  */
-func resolve_generic_calls(ast map[uint64][]byte, grecvfuncnames map[string]struct{}, gfuncnames map[GfuncName]uint64, gfuncset map[uint64]byte, gcallset map[uint64]*Callsite, gcallstack *[]uint64, iterator uint64, genimp func(string, string)bool) (num int) {
+func resolve_generic_calls(ast map[uint64][]byte, grecvfuncnames map[string]struct{}, gfuncnames map[GfuncName]uint64, gfuncset map[uint64]byte, gcallset map[uint64]*Callsite, gcallstack *[]uint64, iterator uint64, genimp func(string, string) bool) (num int) {
 	var node = ast[iterator]
 	if len(node) == 0 {
 		return 0
@@ -376,14 +374,13 @@ func resolve_generic_calls(ast map[uint64][]byte, grecvfuncnames map[string]stru
 		case &mapast.Expression[0]:
 			if len(ast[iterator+i])-1 == int(mapast.ExpressionCall) || len(ast[iterator+i])-1 == int(mapast.ExpressionCallDotDotDot) {
 
-
-
 				if mapast.Which(ast[mapast.O(iterator+i)]) == nil {
 					var where = gfuncnames[GfuncName{string(ast[mapast.O(iterator+i)]), [4]uint64{}}]
 					if where != 0 && (gfuncset[where]&1) == 0 {
 						if false {
-				mapast.PrintCode(ast, mapast.O(iterator+i), mapast.O(iterator+i))
-				println()}
+							mapast.PrintCode(ast, mapast.O(iterator+i), mapast.O(iterator+i))
+							println()
+						}
 
 						gcallset[iterator+i] = &Callsite{calls_func: where, inside_func: gfuncnames[GfuncName{}]}
 						(*gcallstack) = append((*gcallstack), iterator+i)
@@ -391,14 +388,16 @@ func resolve_generic_calls(ast map[uint64][]byte, grecvfuncnames map[string]stru
 				} else if len(ast[mapast.O(iterator+i)])-1 == int(mapast.ExpressionDot) {
 					if _, ok := grecvfuncnames[string(ast[mapast.O(mapast.O(iterator+i))+1])]; ok {
 						if false {
-				mapast.PrintCode(ast, mapast.O(iterator+i), mapast.O(iterator+i))
-				println()}
+							mapast.PrintCode(ast, mapast.O(iterator+i), mapast.O(iterator+i))
+							println()
+						}
 						gcallset[iterator+i] = &Callsite{calls_func: 0, inside_func: gfuncnames[GfuncName{}]}
 						(*gcallstack) = append((*gcallstack), iterator+i)
 					} else if genimp(string(ast[mapast.O(mapast.O(iterator+i))+0]), string(ast[mapast.O(mapast.O(iterator+i))+1])) {
 						if false {
-				mapast.PrintCode(ast, mapast.O(iterator+i), mapast.O(iterator+i))
-				println()}
+							mapast.PrintCode(ast, mapast.O(iterator+i), mapast.O(iterator+i))
+							println()
+						}
 						gcallset[iterator+i] = &Callsite{calls_func: 0, inside_func: gfuncnames[GfuncName{}]}
 						(*gcallstack) = append((*gcallstack), iterator+i)
 					}
@@ -969,7 +968,7 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 
 	var calltype_loc uint64 = 11111111111
 
-	for resolve_generic_calls(asttree, grecvfuncnames, gfuncnames, gfuncset, gcallset, &gcallstack, 0, func(pkg string, fun string)bool {
+	for resolve_generic_calls(asttree, grecvfuncnames, gfuncnames, gfuncset, gcallset, &gcallstack, 0, func(pkg string, fun string) bool {
 
 		var willimport = gimports[pkg]
 
@@ -982,7 +981,6 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 
 			var fmted = fmt.Sprintf("%s", obj)
 
-
 			for len(fmted) > 12 {
 				if fmted[0:12] == "untyped void" {
 
@@ -991,10 +989,7 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 					var paramsnum = uint64(functype.Params().Len())
 					var total = uint64(functype.Params().Len() + functype.Results().Len())
 
-//					fmt.Printf(" %v \n", functype)
-
 					asttree[calltype_loc] = mapast.ToplevFuncNode(false, paramsnum)
-
 
 					asttree[mapast.O(calltype_loc)] = nil
 
@@ -1002,20 +997,18 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 						asttree[mapast.O(calltype_loc)+1+j] = mapast.TypedIdent[0:1]
 						asttree[mapast.O(mapast.O(calltype_loc)+1+j)] = []byte("x")
 
-						typerootpos := mapast.O(mapast.O(calltype_loc)+1+j)+1
+						typerootpos := mapast.O(mapast.O(calltype_loc)+1+j) + 1
 
 						asttree[typerootpos] = mapast.RootOfType
 
 						if j < paramsnum {
 							construct_type(asttree, mapast.O(typerootpos), functype.Params().At(int(j)).Type())
 						} else {
-							construct_type(asttree, mapast.O(typerootpos), functype.Results().At(int(j - paramsnum)).Type())
+							construct_type(asttree, mapast.O(typerootpos), functype.Results().At(int(j-paramsnum)).Type())
 						}
 					}
 
-					gfuncnames[GfuncName{name:fmt.Sprintf("%s.%s", pkg, fun)}] = calltype_loc
-
-//					mapast.PrintDump(asttree, calltype_loc, 0)
+					gfuncnames[GfuncName{name: fmt.Sprintf("%s.%s", pkg, fun)}] = calltype_loc
 
 					calltype_loc += 2
 
@@ -1025,17 +1018,12 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 				fmted = fmted[1:]
 			}
 
-
-
-//			fmt.Printf("%v %v %v\n", obj,p ,fun)
 		}
 
 		return false
 
 	}) > 0 {
 	}
-
-//	mapast.PrintDump(asttree, 0, 0)
 
 	var gcallstack_i = 0
 	for fileid := 0; fileid < len(files); fileid++ {
@@ -1141,6 +1129,11 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 		})
 	}
 
+	var emptyslot uint64 = 1
+	for asttree[emptyslot-1] != nil || asttree[emptyslot] != nil || asttree[emptyslot+1] != nil {
+		emptyslot++
+	}
+	asttree[emptyslot] = []byte("T")
 
 	for k, v := range gcallset {
 		if _, ok2 := gfuncset[v.inside_func]; ok2 {
@@ -1148,20 +1141,52 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 			var name = asttree[mapast.O(k)]
 
 			if mapast.Which(name) == nil {
-				name = append(name, '[', 'T', ']')
+				name = append(name, '[')
+
+				if v.wildctype == 0 {
+					name = append(name, 'T')
+				} else {
+
+					specialize(asttree, v.wildctype, emptyslot)
+
+					mapast.Code(func(s string) {
+						if len(s) != 0 {
+							name = append(name, []byte(s)...)
+						} else {
+							name = append(name, '\n')
+						}
+					}, asttree, v.wildctype, 0)
+
+				}
+
+				name = append(name, ']')
 				asttree[mapast.O(k)] = name
 			} else if len(name)-1 == int(mapast.ExpressionDot) {
 				name = asttree[mapast.O(mapast.O(k))+1]
-				name = append(name, '[', 'T', ']')
+				name = append(name, '[')
+
+				if v.wildctype == 0 {
+					name = append(name, 'T')
+				} else {
+
+					specialize(asttree, v.wildctype, emptyslot)
+
+					mapast.Code(func(s string) {
+						if len(s) != 0 {
+							name = append(name, []byte(s)...)
+						} else {
+							name = append(name, '\n')
+						}
+					}, asttree, v.wildctype, 0)
+
+				}
+
+				name = append(name, ']')
 				asttree[mapast.O(mapast.O(k))+1] = name
 			}
 
-
 			continue
 		}
-//		if v.calls_func == 0 {
-//			continue
-//		}
 
 		var name = asttree[mapast.O(k)]
 
@@ -1172,6 +1197,8 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 			if v.wildctype == 0 {
 				name = append(name, 'T')
 			} else {
+
+				specialize(asttree, v.wildctype, emptyslot)
 
 				mapast.Code(func(s string) {
 					if len(s) != 0 {
@@ -1187,7 +1214,6 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 
 			asttree[mapast.O(k)] = name
 
-
 		} else if len(name)-1 == int(mapast.ExpressionDot) {
 
 			if false {
@@ -1200,6 +1226,8 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 			if v.wildctype == 0 {
 				name = append(name, 'T')
 			} else {
+
+				specialize(asttree, v.wildctype, emptyslot)
 
 				mapast.Code(func(s string) {
 					if len(s) != 0 {
@@ -1215,17 +1243,9 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 
 		}
 
-
-
 	}
 
-	var emptyslot uint64 = 1
-	for asttree[emptyslot-1] != nil || asttree[emptyslot] != nil {
-		emptyslot++
-	}
-
-		asttree[emptyslot] = []byte("T")
-		specialize(asttree, 0, emptyslot)
+	specialize(asttree, 0, emptyslot)
 
 	for k := range gfuncset {
 
@@ -1235,7 +1255,6 @@ func main2(asttree map[uint64][]byte, fset *token.FileSet, files []*ast.File, ig
 
 		asttree[mapast.O(k)] = name
 	}
-
 
 	return nil, nil
 }
